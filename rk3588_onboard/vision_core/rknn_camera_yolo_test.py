@@ -1,10 +1,17 @@
 from pathlib import Path
 import time
+import json
+import signal
+import sys
 
 import cv2
 import numpy as np
 from rknnlite.api import RKNNLite
 
+
+# =========================
+# Basic config
+# =========================
 
 MODEL_PATH = Path("/home/marvsmart/animal_patrol/models/best_fp.rknn")
 CAMERA_DEVICE = "/dev/video12"
@@ -13,6 +20,19 @@ INPUT_SIZE = 640
 CONF_THRES = 0.30
 IOU_THRES = 0.45
 
+CAMERA_WIDTH = 1280
+CAMERA_HEIGHT = 720
+CAMERA_FPS = 30
+
+# Log once per second
+LOG_INTERVAL_SEC = 1.0
+
+# Model class order:
+# 0: peacock
+# 1: tiger
+# 2: elephant
+# 3: wolf
+# 4: monkey
 CLASS_NAMES = {
     0: "peacock",
     1: "tiger",
@@ -21,23 +41,42 @@ CLASS_NAMES = {
     4: "monkey",
 }
 
-# OpenCV 使用 BGR 颜色，不是 RGB
-CLASS_COLORS = {
-    0: (255, 0, 255),    # peacock: purple
-    1: (0, 165, 255),    # tiger: orange
-    2: (255, 180, 0),    # elephant: blue
-    3: (0, 0, 255),      # wolf: red
-    4: (0, 200, 0),      # monkey: green
-}
-
 NUM_CLASSES = len(CLASS_NAMES)
 
+running = True
+
+
+# =========================
+# Signal handling
+# =========================
+
+def signal_handler(sig, frame):
+    global running
+    print("\nReceived stop signal, exiting...")
+    running = False
+
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+
+# =========================
+# Image preprocessing
+# =========================
 
 def letterbox(img, new_shape=(640, 640), color=(114, 114, 114)):
+    """
+    Resize image while keeping aspect ratio, then pad to target size.
+    Returns:
+        padded image
+        resize ratio
+        padding offset: (dw, dh)
+    """
     h, w = img.shape[:2]
     new_h, new_w = new_shape
 
     r = min(new_w / w, new_h / h)
+
     resized_w = int(round(w * r))
     resized_h = int(round(h * r))
 
@@ -54,35 +93,53 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114)):
     left = int(round(dw - 0.1))
     right = int(round(dw + 0.1))
 
-    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
+    img = cv2.copyMakeBorder(
+        img,
+        top,
+        bottom,
+        left,
+        right,
+        cv2.BORDER_CONSTANT,
+        value=color,
+    )
 
     return img, r, (dw, dh)
 
 
 def preprocess(frame):
+    """
+    Convert OpenCV BGR frame to RKNN input.
+    Current input format: NHWC uint8 RGB.
+    """
     img, ratio, pad = letterbox(frame, (INPUT_SIZE, INPUT_SIZE))
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-    # RKNN 常见输入：NHWC uint8
     input_data = np.expand_dims(img_rgb, axis=0).astype(np.uint8)
-
     return input_data, ratio, pad
 
 
+# =========================
+# YOLOv8 postprocess
+# =========================
+
 def xywh_to_xyxy(boxes):
     xyxy = np.zeros_like(boxes)
+
     xyxy[:, 0] = boxes[:, 0] - boxes[:, 2] / 2
     xyxy[:, 1] = boxes[:, 1] - boxes[:, 3] / 2
     xyxy[:, 2] = boxes[:, 0] + boxes[:, 2] / 2
     xyxy[:, 3] = boxes[:, 1] + boxes[:, 3] / 2
+
     return xyxy
 
 
 def postprocess(outputs, ratio, pad, original_shape):
     """
-    支持常见 YOLOv8 输出：
-    [1, 9, 8400] 或 [1, 8400, 9]
-    其中 9 = 4 个 bbox + 5 个类别分数。
+    Supports common YOLOv8 output:
+        [1, 9, 8400]
+        [1, 8400, 9]
+
+    where:
+        9 = 4 box values + 5 class scores
     """
     if outputs is None or len(outputs) == 0:
         return []
@@ -90,10 +147,8 @@ def postprocess(outputs, ratio, pad, original_shape):
     out = np.array(outputs[0])
     out = np.squeeze(out)
 
-    # 打印一次，方便确认实际输出
-    # 常见：out shape = (9, 8400) 或 (8400, 9)
     if out.ndim != 2:
-        print("暂不支持的输出维度:", out.shape)
+        print("Unsupported output dimension:", out.shape)
         return []
 
     expected_dim = 4 + NUM_CLASSES
@@ -103,8 +158,8 @@ def postprocess(outputs, ratio, pad, original_shape):
     elif out.shape[1] == expected_dim:
         pred = out
     else:
-        print("暂不支持的 YOLO 输出 shape:", out.shape)
-        print("需要的最后维度应为:", expected_dim)
+        print("Unsupported YOLO output shape:", out.shape)
+        print("Expected one dimension to be:", expected_dim)
         return []
 
     boxes_xywh = pred[:, 0:4]
@@ -124,19 +179,27 @@ def postprocess(outputs, ratio, pad, original_shape):
     boxes_xyxy = xywh_to_xyxy(boxes_xywh)
 
     dw, dh = pad
+
+    # Restore box coordinates from letterbox image to original image
     boxes_xyxy[:, [0, 2]] -= dw
     boxes_xyxy[:, [1, 3]] -= dh
     boxes_xyxy /= ratio
 
     orig_h, orig_w = original_shape[:2]
+
     boxes_xyxy[:, [0, 2]] = np.clip(boxes_xyxy[:, [0, 2]], 0, orig_w - 1)
     boxes_xyxy[:, [1, 3]] = np.clip(boxes_xyxy[:, [1, 3]], 0, orig_h - 1)
 
-    # OpenCV NMSBoxes 需要 x,y,w,h
     nms_boxes = []
+
     for box in boxes_xyxy:
         x1, y1, x2, y2 = box
-        nms_boxes.append([int(x1), int(y1), int(x2 - x1), int(y2 - y1)])
+        nms_boxes.append([
+            int(x1),
+            int(y1),
+            int(max(0, x2 - x1)),
+            int(max(0, y2 - y1)),
+        ])
 
     indices = cv2.dnn.NMSBoxes(
         bboxes=nms_boxes,
@@ -159,86 +222,32 @@ def postprocess(outputs, ratio, pad, original_shape):
         name = CLASS_NAMES.get(cls_id, str(cls_id))
 
         detections.append({
-            "box": [x1, y1, x2, y2],
             "class_id": cls_id,
             "name": name,
-            "conf": conf,
+            "conf": round(conf, 4),
+            "bbox": [int(x1), int(y1), int(x2), int(y2)],
         })
 
     return detections
 
 
-def draw_detections(frame, detections):
-    """
-    使用 OpenCV 绘制英文标签和不同颜色的识别框。
-    英文标签不会出现中文“??”问题。
-    """
-    if not detections:
-        return frame
+def build_summary(detections):
+    summary = {}
 
     for det in detections:
-        x1, y1, x2, y2 = det["box"]
-        cls_id = int(det["class_id"])
         name = det["name"]
-        conf = float(det["conf"])
+        summary[name] = summary.get(name, 0) + 1
 
-        color = CLASS_COLORS.get(cls_id, (0, 255, 0))
-        label = f"{name} {conf:.2f}"
+    return summary
 
-        # 画识别框
-        cv2.rectangle(
-            frame,
-            (x1, y1),
-            (x2, y2),
-            color,
-            3
-        )
 
-        # 计算文字大小
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.8
-        thickness = 2
+# =========================
+# Main
+# =========================
 
-        text_size, baseline = cv2.getTextSize(
-            label,
-            font,
-            font_scale,
-            thickness
-        )
-
-        text_w, text_h = text_size
-
-        # 标签背景位置
-        label_x1 = x1
-        label_y1 = max(0, y1 - text_h - baseline - 8)
-        label_x2 = x1 + text_w + 10
-        label_y2 = label_y1 + text_h + baseline + 8
-
-        # 画标签背景
-        cv2.rectangle(
-            frame,
-            (label_x1, label_y1),
-            (label_x2, label_y2),
-            color,
-            -1
-        )
-
-        # 写英文类别名
-        cv2.putText(
-            frame,
-            label,
-            (label_x1 + 5, label_y2 - baseline - 4),
-            font,
-            font_scale,
-            (255, 255, 255),
-            thickness,
-            cv2.LINE_AA
-        )
-
-    return frame
 def main():
     if not MODEL_PATH.exists():
-        raise FileNotFoundError(f"RKNN 模型不存在: {MODEL_PATH}")
+        raise FileNotFoundError(f"RKNN model not found: {MODEL_PATH}")
 
     rknn = RKNNLite()
 
@@ -249,7 +258,14 @@ def main():
         raise RuntimeError(f"load_rknn failed, ret={ret}")
 
     print("--> init runtime")
-    ret = rknn.init_runtime(core_mask=RKNNLite.NPU_CORE_0)
+    try:
+        core_mask = RKNNLite.NPU_CORE_0_1_2
+        print("Using NPU core mask: NPU_CORE_0_1_2")
+    except AttributeError:
+        core_mask = RKNNLite.NPU_CORE_0
+        print("NPU_CORE_0_1_2 not available, fallback to NPU_CORE_0")
+
+    ret = rknn.init_runtime(core_mask=core_mask)
     print("init_runtime ret =", ret)
     if ret != 0:
         raise RuntimeError(f"init_runtime failed, ret={ret}")
@@ -257,73 +273,133 @@ def main():
     cap = cv2.VideoCapture(CAMERA_DEVICE, cv2.CAP_V4L2)
 
     if not cap.isOpened():
-        raise RuntimeError(f"摄像头打开失败: {CAMERA_DEVICE}")
+        raise RuntimeError(f"Camera open failed: {CAMERA_DEVICE}")
 
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+    cap.set(cv2.CAP_PROP_FPS, CAMERA_FPS)
 
-    print("摄像头打开成功")
-    print("实际宽度:", cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    print("实际高度:", cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    print("实际 FPS:", cap.get(cv2.CAP_PROP_FPS))
-    print("按 q 退出")
+    actual_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    actual_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    actual_fps = cap.get(cv2.CAP_PROP_FPS)
 
-    frame_count = 0
-    infer_count = 0
+    print("Camera opened")
+    print("Actual width:", actual_width)
+    print("Actual height:", actual_height)
+    print("Actual FPS setting:", actual_fps)
+    print("Headless recognition started. Press Ctrl+C to stop.")
+
+    frame_count_total = 0
+    infer_count_total = 0
+    fail_count_total = 0
+
+    frame_count_window = 0
+    infer_count_window = 0
+
     first_output_printed = False
+
     start_time = time.time()
+    last_log_time = start_time
+    last_detections = []
+    last_summary = {}
 
-    while True:
-        ret, frame = cap.read()
-        if not ret or frame is None:
-            print("读取摄像头失败")
-            break
+    try:
+        while running:
+            ret, frame = cap.read()
 
-        frame_count += 1
+            if not ret or frame is None:
+                fail_count_total += 1
+                print(json.dumps({
+                    "level": "warning",
+                    "event": "camera_read_failed",
+                    "fail_count_total": fail_count_total,
+                    "timestamp": round(time.time(), 3),
+                }, ensure_ascii=False))
 
-        input_data, ratio, pad = preprocess(frame)
+                if fail_count_total >= 30:
+                    raise RuntimeError("Camera read failed too many times")
 
-        t0 = time.time()
-        outputs = rknn.inference(inputs=[input_data])
-        infer_ms = (time.time() - t0) * 1000.0
+                continue
 
-        infer_count += 1
+            frame_count_total += 1
+            frame_count_window += 1
 
-        if not first_output_printed:
-            print("第一次输出 shape：")
-            for i, out in enumerate(outputs):
-                arr = np.array(out)
-                print(f"output[{i}] shape={arr.shape}, dtype={arr.dtype}, min={arr.min()}, max={arr.max()}")
-            first_output_printed = True
+            input_data, ratio, pad = preprocess(frame)
 
-        detections = postprocess(outputs, ratio, pad, frame.shape)
+            t0 = time.time()
+            outputs = rknn.inference(inputs=[input_data])
+            infer_ms = (time.time() - t0) * 1000.0
 
-        summary = {}
-        for det in detections:
-            summary[det["name"]] = summary.get(det["name"], 0) + 1
+            infer_count_total += 1
+            infer_count_window += 1
 
-        if infer_count % 10 == 0:
-            elapsed = time.time() - start_time
-            print({
-                "elapsed_s": round(elapsed, 1),
-                "frame_count": frame_count,
-                "infer_count": infer_count,
-                "infer_ms": round(infer_ms, 2),
-                "summary": summary,
-            })
+            if not first_output_printed:
+                print("First output shape:")
+                for i, out in enumerate(outputs):
+                    arr = np.array(out)
+                    print(
+                        f"output[{i}] shape={arr.shape}, "
+                        f"dtype={arr.dtype}, "
+                        f"min={arr.min()}, "
+                        f"max={arr.max()}"
+                    )
+                first_output_printed = True
 
-        vis = draw_detections(frame.copy(), detections)
-        cv2.imshow("RK3588 RKNN YOLO Camera", vis)
+            detections = postprocess(outputs, ratio, pad, frame.shape)
+            summary = build_summary(detections)
 
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
+            last_detections = detections
+            last_summary = summary
 
-    cap.release()
-    rknn.release()
-    cv2.destroyAllWindows()
-    print("测试结束")
+            now = time.time()
+            log_dt = now - last_log_time
+
+            if log_dt >= LOG_INTERVAL_SEC:
+                elapsed = now - start_time
+
+                # Because every loop does one inference, fps and infer_fps will usually be close.
+                fps = frame_count_window / log_dt
+                infer_fps = infer_count_window / log_dt
+
+                log_item = {
+                    "timestamp": round(now, 3),
+                    "elapsed_s": round(elapsed, 1),
+                    "fps": round(fps, 2),
+                    "infer_fps": round(infer_fps, 2),
+                    "last_infer_ms": round(infer_ms, 2),
+                    "frame_count_total": frame_count_total,
+                    "infer_count_total": infer_count_total,
+                    "fail_count_total": fail_count_total,
+                    "summary": last_summary,
+                    "detections": last_detections,
+                }
+
+                print(json.dumps(log_item, ensure_ascii=False))
+
+                frame_count_window = 0
+                infer_count_window = 0
+                last_log_time = now
+
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt received, stopping...")
+
+    finally:
+        cap.release()
+        rknn.release()
+
+        total_elapsed = time.time() - start_time
+
+        final_log = {
+            "event": "finished",
+            "elapsed_s": round(total_elapsed, 1),
+            "frame_count_total": frame_count_total,
+            "infer_count_total": infer_count_total,
+            "fail_count_total": fail_count_total,
+        }
+
+        print(json.dumps(final_log, ensure_ascii=False))
+        print("Test finished")
 
 
 if __name__ == "__main__":
