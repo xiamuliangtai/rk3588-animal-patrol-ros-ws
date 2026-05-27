@@ -1,0 +1,52 @@
+# catkin build output
+/build/
+/devel/
+/install/
+/log/
+.logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# virtual environments
+.venv/
+venv/
+env/
+
+# editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ROS runtime
+*.bag
+*.bag.active
+.ros/
+
+# models and large files
+*.pt
+*.onnx
+*.rknn
+*.engine
+*.tflite
+
+# data / logs / media
+data/
+datasets/
+runs/
+logs/
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.avi
+*.mkv
+
+# system
+.DS_Store
+Thumbs.db
