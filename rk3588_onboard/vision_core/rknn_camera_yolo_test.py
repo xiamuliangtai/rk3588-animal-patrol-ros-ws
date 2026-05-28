@@ -14,7 +14,7 @@ from rknnlite.api import RKNNLite
 # Basic config
 # =========================
 
-MODEL_PATH = Path("/home/marvsmart/animal_patrol/models/best_int8_calib300.rknn")
+MODEL_PATH = Path("/home/marvsmart/animal_patrol/models/best_fp.rknn")
 CAMERA_DEVICE = "/dev/video12"
 
 INPUT_SIZE = 640
