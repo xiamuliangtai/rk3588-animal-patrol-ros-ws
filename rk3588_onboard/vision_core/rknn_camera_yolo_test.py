@@ -14,11 +14,11 @@ from rknnlite.api import RKNNLite
 # Basic config
 # =========================
 
-MODEL_PATH = Path("/home/marvsmart/animal_patrol/models/best_fp.rknn")
+MODEL_PATH = Path("/home/marvsmart/animal_patrol/models/best_416_fp.rknn")
 CAMERA_DEVICE = "/dev/video12"
 
-INPUT_SIZE = 640
-CONF_THRES = 0.20
+INPUT_SIZE = 416
+CONF_THRES = 0.30
 IOU_THRES = 0.45
 
 CAMERA_WIDTH = 1280
