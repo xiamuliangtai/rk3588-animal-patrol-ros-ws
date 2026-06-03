@@ -1,0 +1,43 @@
+<launch>
+    <node pkg="animal_vision"
+          type="vision_node.py"
+          name="vision_node"
+          output="screen">
+
+        <param name="model_path"
+               value="/home/marvsmart/animal_patrol/models/edc_yolov8n_best_640_opset12.rknn" />
+
+        <param name="camera_device"
+               value="/dev/video12" />
+
+        <param name="input_size"
+               value="640" />
+
+        <param name="conf_thres"
+               value="0.70" />
+
+        <param name="iou_thres"
+               value="0.9" />
+
+        <param name="camera_width"
+               value="1280" />
+
+        <param name="camera_height"
+               value="720" />
+
+        <param name="camera_fps"
+               value="30" />
+
+        <param name="publish_interval_sec"
+               value="1.0" />
+
+        <param name="stable_window_size"
+               value="5" />
+
+        <param name="stable_min_ratio"
+               value="0.60" />
+
+        <param name="stable_min_hit_windows"
+               value="3" />
+    </node>
+</launch>
