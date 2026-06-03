@@ -3,7 +3,7 @@ import time
 import json
 import signal
 import sys
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 
 import cv2
 import numpy as np
@@ -14,12 +14,12 @@ from rknnlite.api import RKNNLite
 # Basic config
 # =========================
 
-MODEL_PATH = Path("/home/marvsmart/animal_patrol/models/best_416_fp.rknn")
+MODEL_PATH = Path("/home/marvsmart/animal_patrol/models/edc_yolov8n_best_640_opset12.rknn")
 CAMERA_DEVICE = "/dev/video12"
 
-INPUT_SIZE = 416
-CONF_THRES = 0.30
-IOU_THRES = 0.45
+INPUT_SIZE = 640
+CONF_THRES = 0.70
+IOU_THRES = 0.9
 
 CAMERA_WIDTH = 1280
 CAMERA_HEIGHT = 720
@@ -29,10 +29,10 @@ LOG_INTERVAL_SEC = 1.0
 
 CLASS_NAMES = {
     0: "peacock",
-    1: "tiger",
-    2: "elephant",
-    3: "wolf",
-    4: "monkey",
+    4: "tiger",
+    3: "elephant",
+    1: "wolf",
+    2: "monkey",
 }
 
 NUM_CLASSES = len(CLASS_NAMES)
