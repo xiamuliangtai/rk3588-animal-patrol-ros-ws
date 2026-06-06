@@ -5,7 +5,7 @@
           output="screen">
 
         <param name="model_path"
-               value="/home/marvsmart/animal_patrol/models/edc_yolov8n_best_640_opset12.rknn" />
+               value="/home/marvsmart/animal_patrol/models/edc_yolov8n_retrain5000_v6_washout_guard_640_opset12.rknn" />
 
         <param name="camera_device"
                value="/dev/video12" />
