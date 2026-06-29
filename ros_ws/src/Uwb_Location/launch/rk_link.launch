@@ -1,0 +1,22 @@
+<launch>
+  <arg name="uwb_port" default="/dev/ttyUSB0" />
+  <arg name="uwb_baudrate" default="115200" />
+  <arg name="fc_port" default="/dev/ttyUSB1" />
+  <arg name="fc_baudrate" default="500000" />
+  <arg name="send_rate" default="20.0" />
+  <arg name="simulate" default="false" />
+
+  <node pkg="Uwb_Location" type="UwbLocation" name="uwb_location" output="screen">
+    <param name="port" value="$(arg uwb_port)" />
+    <param name="baudrate" value="$(arg uwb_baudrate)" />
+    <param name="simulate" value="$(arg simulate)" />
+  </node>
+
+  <node pkg="Uwb_Location" type="RKLinkSender" name="rk_link_sender" output="screen">
+    <param name="port" value="$(arg fc_port)" />
+    <param name="baudrate" value="$(arg fc_baudrate)" />
+    <param name="uwb_topic" value="/uwb/data" />
+    <param name="vision_topic" value="/vision/result_stable" />
+    <param name="send_rate" value="$(arg send_rate)" />
+  </node>
+</launch>

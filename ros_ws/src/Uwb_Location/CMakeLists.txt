@@ -53,3 +53,8 @@ add_executable(UwbLocation src/UwbLocation.cpp src/trilateration.cpp )
 add_dependencies(UwbLocation ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(UwbLocation
         ${catkin_LIBRARIES})
+
+add_executable(RKLinkSender src/RKLinkSender.cpp)
+add_dependencies(RKLinkSender ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(RKLinkSender
+        ${catkin_LIBRARIES})

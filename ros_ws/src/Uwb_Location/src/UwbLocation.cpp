@@ -593,9 +593,16 @@ int main(int argc, char** argv)
         //创建timeout
         serial::Timeout to = serial::Timeout::simpleTimeout(11);
         //设置要打开的串口名称
-        sp.setPort("/dev/ttyUSB7");
+        //sp.setPort("/dev/ttyUSB7");
         //设置串口通信的波特率
-        sp.setBaudrate(115200);
+        //sp.setBaudrate(115200);
+        std::string uwb_port;
+        int uwb_baudrate;
+        pnh.param<std::string>("port", uwb_port, "/dev/ttyUSB7");
+        pnh.param("baudrate", uwb_baudrate, 115200);
+
+        sp.setPort(uwb_port);
+        sp.setBaudrate(uwb_baudrate);
         //串口设置timeout
         sp.setTimeout(to);
 
