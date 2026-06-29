@@ -4,6 +4,7 @@
 #include <string>
 #include <string.h>
 #include <algorithm>
+#include <cmath>
 #include "std_msgs/String.h"              //ros定义的String数据类型
 #include "Uwb_Location/trilateration.h"
 #include "Uwb_Location/uwb.h"
@@ -34,11 +35,148 @@ Quaternion Q;
 unsigned char BufDataFromCtrl[MAX_DATA_NUM];
 int BufCtrlPosit_w = 0, BufCtrlPosit_r = 0;
 int DataRecord=0, rcvsign = 0;
-int range[8] = {-1};
+int range[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+bool uwb_new_position = false;
+
+static const int UWB_ANCHOR_COUNT_FOR_XY = 4;
+static const double UWB_TAG_HEIGHT_M = 1.20;  // H problem flight height. Adjust after calibration.
+
+static void reset_ranges()
+{
+    std::fill(range, range + 8, -1);
+}
+
+static void load_anchor_positions(vec3d anchorArray[8])
+{
+    for (int i = 0; i < 8; ++i)
+    {
+        anchorArray[i].x = 0.0;
+        anchorArray[i].y = 0.0;
+        anchorArray[i].z = 0.0;
+    }
+
+    // Unit: meter. Keep these values consistent with the real anchor layout.
+    anchorArray[0].x = 0.0;
+    anchorArray[0].y = 0.0;
+    anchorArray[0].z = 2.0;
+
+    anchorArray[1].x = 0.0;
+    anchorArray[1].y = 1.8;
+    anchorArray[1].z = 2.0;
+
+    anchorArray[2].x = 3.6;
+    anchorArray[2].y = 0.0;
+    anchorArray[2].z = 2.0;
+
+    anchorArray[3].x = 3.6;
+    anchorArray[3].y = 1.8;
+    anchorArray[3].z = 2.0;
+}
+
+static bool horizontal_range_m(const vec3d& anchor, int range_mm, double* horizontal_range)
+{
+    if (range_mm <= 0)
+    {
+        return false;
+    }
+
+    const double slant_range = static_cast<double>(range_mm) / 1000.0;
+    const double dz = UWB_TAG_HEIGHT_M - anchor.z;
+    double horizontal_sq = slant_range * slant_range - dz * dz;
+
+    if (horizontal_sq < -0.05)
+    {
+        return false;
+    }
+    if (horizontal_sq < 0.0)
+    {
+        horizontal_sq = 0.0;
+    }
+
+    *horizontal_range = std::sqrt(horizontal_sq);
+    return true;
+}
+
+static int solve_xy_location(vec3d* solution, const vec3d anchorArray[8], const int distanceArray[8])
+{
+    bool valid[8] = {false};
+    double horizontal_ranges[8] = {0.0};
+    int valid_count = 0;
+    int ref = -1;
+
+    for (int i = 0; i < UWB_ANCHOR_COUNT_FOR_XY; ++i)
+    {
+        if (horizontal_range_m(anchorArray[i], distanceArray[i], &horizontal_ranges[i]))
+        {
+            valid[i] = true;
+            ++valid_count;
+            if (ref < 0)
+            {
+                ref = i;
+            }
+        }
+    }
+
+    if (valid_count < 3 || ref < 0)
+    {
+        return -1;
+    }
+
+    const double x0 = anchorArray[ref].x;
+    const double y0 = anchorArray[ref].y;
+    const double r0 = horizontal_ranges[ref];
+
+    double ata00 = 0.0;
+    double ata01 = 0.0;
+    double ata11 = 0.0;
+    double atb0 = 0.0;
+    double atb1 = 0.0;
+    int equation_count = 0;
+
+    for (int i = 0; i < UWB_ANCHOR_COUNT_FOR_XY; ++i)
+    {
+        if (!valid[i] || i == ref)
+        {
+            continue;
+        }
+
+        const double xi = anchorArray[i].x;
+        const double yi = anchorArray[i].y;
+        const double ri = horizontal_ranges[i];
+        const double a = 2.0 * (xi - x0);
+        const double b = 2.0 * (yi - y0);
+        const double c = r0 * r0 - ri * ri + xi * xi - x0 * x0 + yi * yi - y0 * y0;
+
+        ata00 += a * a;
+        ata01 += a * b;
+        ata11 += b * b;
+        atb0 += a * c;
+        atb1 += b * c;
+        ++equation_count;
+    }
+
+    if (equation_count < 2)
+    {
+        return -1;
+    }
+
+    const double det = ata00 * ata11 - ata01 * ata01;
+    if (std::fabs(det) < 1e-9)
+    {
+        return -1;
+    }
+
+    solution->x = (atb0 * ata11 - ata01 * atb1) / det;
+    solution->y = (ata00 * atb1 - ata01 * atb0) / det;
+    solution->z = 0.0;  // Z is intentionally not calculated from UWB.
+    return 2;
+}
 
 void receive_deal_func()
 {
     vec3d anchorArray[8];
+    uwb_new_position = false;
+    reset_ranges();
     
     if((receive_buf[0] == 'm') && (receive_buf[1] == 'c'))
     {
@@ -129,6 +267,12 @@ void receive_deal_func()
         uwb_aoa_a1 = aoa_a1;
         pdoa_x = x;
         pdoa_y = y;
+        report.x = x;
+        report.y = y;
+        report.z = 0.0;
+        result = 2;
+        uwb_new_position = true;
+        return;
 
     }
     else if((receive_buf[0] == 'm') && (receive_buf[1] == 'i'))
@@ -324,45 +468,14 @@ void receive_deal_func()
         return;
     }
 
-    //A0 uint:m
-    anchorArray[0].x = 0.0; 
-    anchorArray[0].y = 0.0; 
-    anchorArray[0].z = 2.0; 
-    //A1 uint:m
-    anchorArray[1].x = 0.0; 
-    anchorArray[1].y = 4.0; 
-    anchorArray[1].z = 2.0;
-    //A2 uint:m
-    anchorArray[2].x = 5.0; 
-    anchorArray[2].y = 0.0; 
-    anchorArray[2].z = 2.0; 
-    //A3 uint:m
-    anchorArray[3].x = 5.0; 
-    anchorArray[3].y = 4.0; 
-    anchorArray[3].z = 2.0; 
-    //A4 uint:m
-    /*anchorArray[4].x = 2.0; 
-    anchorArray[4].y = 1.0; 
-    anchorArray[4].z = 2.5; 
-    //A5 uint:m
-    anchorArray[5].x = 2.0; 
-    anchorArray[5].y = 0.0; 
-    anchorArray[5].z = 2.5;
-    //A6 uint:m
-    anchorArray[6].x = 3.0; 
-    anchorArray[6].y = 1.0; 
-    anchorArray[6].z = 2.5; 
-    //A7 uint:m
-    anchorArray[7].x = 3.0; 
-    anchorArray[7].y = 0.0; 
-    anchorArray[7].z = 2.5; */
-
-    result = GetLocation(&report, &anchorArray[0], &range[0]);
+    load_anchor_positions(anchorArray);
+    result = solve_xy_location(&report, anchorArray, range);
+    uwb_new_position = (result > 0);
 
     printf("result = %d\n",result);
     printf("x = %f\n",report.x);
     printf("y = %f\n",report.y);
-    printf("z = %f\n",report.z);
+    printf("z unused = %f\n",report.z);
 
 }
 
@@ -480,7 +593,7 @@ int main(int argc, char** argv)
         //创建timeout
         serial::Timeout to = serial::Timeout::simpleTimeout(11);
         //设置要打开的串口名称
-        sp.setPort("/dev/ttyUSB0");
+        sp.setPort("/dev/ttyUSB7");
         //设置串口通信的波特率
         sp.setBaudrate(115200);
         //串口设置timeout
@@ -525,6 +638,7 @@ int main(int argc, char** argv)
     while(ros::ok())
     {
         bool updated = false;
+        uwb_new_position = false;
 
         if (simulate)
         {
@@ -560,7 +674,7 @@ int main(int argc, char** argv)
             }
         }
 
-        if (updated)
+        if (updated && uwb_new_position)
         {
             //---------------------------------UWB----------------------------------------------------
             uwb_data.header.stamp = ros::Time::now();
