@@ -620,7 +620,9 @@ int main(int argc, char** argv)
         //判断串口是否打开成功
         if(sp.isOpen())
         {
-            ROS_INFO_STREAM("Serial port is opened: /dev/ttyCH341USB0");
+            //ROS_INFO_STREAM("Serial port is opened: /dev/ttyCH341USB0");
+            ROS_INFO_STREAM("UWB serial port is opened: " << uwb_port
+                << ", baudrate=" << uwb_baudrate);
         }
         else
         {
