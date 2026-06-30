@@ -1,7 +1,7 @@
 <launch>
-  <arg name="uwb_port" default="/dev/ttyUSB0" />
+  <arg name="uwb_port" default="/dev/serial/by-id/usb-1a86_USB2.0-Serial-if00-port0" />
   <arg name="uwb_baudrate" default="115200" />
-  <arg name="fc_port" default="/dev/ttyUSB1" />
+  <arg name="fc_port" default="/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0" />
   <arg name="fc_baudrate" default="500000" />
   <arg name="send_rate" default="20.0" />
   <arg name="simulate" default="false" />

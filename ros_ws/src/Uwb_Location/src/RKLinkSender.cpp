@@ -2,6 +2,7 @@
 #include <serial/serial.h>
 #include <std_msgs/String.h>
 #include <Uwb_Location/uwb.h>
+#include <iostream>
 
 #include <algorithm>
 #include <cmath>
@@ -204,12 +205,33 @@ public:
     }
 
 private:
+    // void writeFrame(const std::vector<uint8_t>& frame)
+    // {
+    //     const size_t written = serial_.write(frame);
+    //     if (written != frame.size())
+    //     {
+    //         ROS_WARN_THROTTLE(1.0, "RK_LINK short write: %zu/%zu", written, frame.size());
+    //     }
+    // }
     void writeFrame(const std::vector<uint8_t>& frame)
     {
-        const size_t written = serial_.write(frame);
-        if (written != frame.size())
+        try
         {
-            ROS_WARN_THROTTLE(1.0, "RK_LINK short write: %zu/%zu", written, frame.size());
+            if (!serial_.isOpen())
+            {
+                ROS_ERROR_THROTTLE(1.0, "RK_LINK serial is not open");
+                return;
+            }
+
+            const size_t written = serial_.write(frame);
+            if (written != frame.size())
+            {
+                ROS_WARN_THROTTLE(1.0, "RK_LINK short write: %zu/%zu", written, frame.size());
+            }
+        }
+        catch (const std::exception& e)
+        {
+            ROS_ERROR_THROTTLE(1.0, "RK_LINK serial write failed: %s", e.what());
         }
     }
 
@@ -302,8 +324,14 @@ int main(int argc, char** argv)
         RKLinkSender sender;
         ros::spin();
     }
+    // catch (const std::exception& e)
+    // {
+    //     ROS_FATAL_STREAM("RKLinkSender failed: " << e.what());
+    //     return 1;
+    // }
     catch (const std::exception& e)
     {
+        std::cerr << "RKLinkSender failed: " << e.what() << std::endl;
         ROS_FATAL_STREAM("RKLinkSender failed: " << e.what());
         return 1;
     }
