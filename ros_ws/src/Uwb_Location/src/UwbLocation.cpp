@@ -61,15 +61,15 @@ static void load_anchor_positions(vec3d anchorArray[8])
     anchorArray[0].z = 2.0;
 
     anchorArray[1].x = 0.0;
-    anchorArray[1].y = 1.8;
+    anchorArray[1].y = 5.0;
     anchorArray[1].z = 2.0;
 
-    anchorArray[2].x = 3.6;
+    anchorArray[2].x = 4.0;
     anchorArray[2].y = 0.0;
     anchorArray[2].z = 2.0;
 
-    anchorArray[3].x = 3.6;
-    anchorArray[3].y = 1.8;
+    anchorArray[3].x = 4.0;
+    anchorArray[3].y = 5.0;
     anchorArray[3].z = 2.0;
 }
 
