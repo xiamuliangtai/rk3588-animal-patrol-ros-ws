@@ -178,7 +178,7 @@ public:
         : nh_(), pnh_("~"), seq_(0), send_rate_hz_(20.0)
     {
         pnh_.param<std::string>("port", port_name_, "/dev/ttyUSB1");
-        pnh_.param("baudrate", baudrate_, 500000);
+        pnh_.param("baudrate", baudrate_, 115200);
         pnh_.param<std::string>("uwb_topic", uwb_topic_, "/uwb/data");
         pnh_.param<std::string>("vision_topic", vision_topic_, "/vision/result_stable");
         pnh_.param("send_rate", send_rate_hz_, 20.0);
