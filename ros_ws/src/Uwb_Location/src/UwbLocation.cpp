@@ -5,6 +5,7 @@
 #include <string.h>
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include "std_msgs/String.h"              //ros定义的String数据类型
 #include "Uwb_Location/trilateration.h"
 #include "Uwb_Location/uwb.h"
@@ -479,41 +480,70 @@ void receive_deal_func()
 
 }
 
-
 void CtrlSerDataDeal()
 {
-    unsigned char middata = 0;
+    unsigned char middata = 0U;
     static unsigned char dataTmp[MAX_DATA_NUM] = {0};
 
-    while(BufCtrlPosit_r != BufCtrlPosit_w)
+    while (BufCtrlPosit_r != BufCtrlPosit_w)
     {
         middata = BufDataFromCtrl[BufCtrlPosit_r];
-        BufCtrlPosit_r = (BufCtrlPosit_r==MAX_DATA_NUM-1)? 0 : (BufCtrlPosit_r+1);
+        BufCtrlPosit_r =
+            (BufCtrlPosit_r == MAX_DATA_NUM - 1)
+                ? 0
+                : BufCtrlPosit_r + 1;
 
-        if(((middata == DataHead)||(middata == DataHead2))&&(rcvsign == 0))//收到头
+        if (((middata == DataHead) || (middata == DataHead2)) &&
+            (rcvsign == 0))
         {
-            rcvsign = 1;//开始了一个数据帧
-            dataTmp[DataRecord++] = middata;//数据帧接收中
+            rcvsign = 1;
+            DataRecord = 0;
+            dataTmp[DataRecord++] = middata;
         }
-        else if((middata != DataTail)&&(rcvsign == 1))
+        else if ((middata != DataTail) && (rcvsign == 1))
         {
-            dataTmp[DataRecord++] = middata;//数据帧接收中
-        }
-        else if((middata == DataTail)&&(rcvsign == 1))//收到尾
-        {
-            if(DataRecord != 1)
+            // Reserve one byte for the frame tail and one for '\0'.
+            if (DataRecord < MAX_DATA_NUM - 2)
             {
+                dataTmp[DataRecord++] = middata;
+            }
+            else
+            {
+                DataRecord = 0;
                 rcvsign = 0;
+                memset(dataTmp, 0, sizeof(dataTmp));
+                ROS_WARN_THROTTLE(
+                    1.0,
+                    "UWB frame is too long; parser has been reset");
+            }
+        }
+        else if ((middata == DataTail) && (rcvsign == 1))
+        {
+            if ((DataRecord > 1) &&
+                (DataRecord <= MAX_DATA_NUM - 2))
+            {
                 dataTmp[DataRecord++] = middata;
                 dataTmp[DataRecord] = '\0';
 
-                strncpy((char*)receive_buf, (char*)dataTmp, DataRecord);
-                printf("receive_buf = %slen = %d\n", receive_buf, DataRecord);
-                receive_deal_func(); /*调用处理函数*/
-                bzero(receive_buf, sizeof(receive_buf));
+                const size_t copy_length = std::min(
+                    static_cast<size_t>(DataRecord),
+                    sizeof(receive_buf) - 1U);
 
-                DataRecord = 0;
+                memcpy(receive_buf, dataTmp, copy_length);
+                receive_buf[copy_length] = '\0';
+
+                printf(
+                    "receive_buf = %slen = %d\n",
+                    receive_buf,
+                    DataRecord);
+
+                receive_deal_func();
+                memset(receive_buf, 0, sizeof(receive_buf));
             }
+
+            DataRecord = 0;
+            rcvsign = 0;
+            memset(dataTmp, 0, sizeof(dataTmp));
         }
     }
 }
@@ -656,30 +686,49 @@ int main(int argc, char** argv)
         }
         else
         {
-            //获取缓冲区内的字节数
-            size_t len = sp.available();
-            if(len > 0)
+            try
             {
-                unsigned char usart_buf[1024]={0};
-                sp.read(usart_buf, len);
+                const size_t available_bytes = sp.available();
 
-                unsigned char *pbuf;
-                unsigned char buf[2014] = {0};
-
-                pbuf = (unsigned char *)usart_buf;
-                memcpy(&buf[0], pbuf, len);
-
-                int reallength = (int)len;
-                if(reallength != 0)
+                if (available_bytes > 0U)
                 {
-                    for(int i=0; i < reallength; i++)
+                    unsigned char usart_buf[MAX_DATA_NUM] = {0};
+
+                    // The ring buffer can store at most MAX_DATA_NUM - 1 bytes.
+                    const size_t max_read_bytes =
+                        sizeof(usart_buf) - 1U;
+
+                    const size_t request_bytes =
+                        std::min(available_bytes, max_read_bytes);
+
+                    const size_t read_bytes =
+                        sp.read(usart_buf, request_bytes);
+
+                    if (read_bytes > 0U)
                     {
-                        BufDataFromCtrl[BufCtrlPosit_w] = buf[i];
-                        BufCtrlPosit_w = (BufCtrlPosit_w==(MAX_DATA_NUM-1))? 0 : (1 + BufCtrlPosit_w);
+                        for (size_t i = 0U; i < read_bytes; ++i)
+                        {
+                            BufDataFromCtrl[BufCtrlPosit_w] =
+                                usart_buf[i];
+
+                            BufCtrlPosit_w =
+                                (BufCtrlPosit_w == MAX_DATA_NUM - 1)
+                                    ? 0
+                                    : BufCtrlPosit_w + 1;
+                        }
+
+                        CtrlSerDataDeal();
+                        updated = true;
                     }
                 }
-                CtrlSerDataDeal();
-                updated = true;
+            }
+            catch (const std::exception& error)
+            {
+                ROS_ERROR_STREAM(
+                    "UWB serial read failed: " << error.what());
+
+                // rk_link.launch respawns this node after two seconds.
+                return -1;
             }
         }
 

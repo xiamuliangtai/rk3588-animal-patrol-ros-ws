@@ -2,7 +2,7 @@
   <!-- Hardware and model -->
   <arg name="uwb_port" default="/dev/uwb_tag" />
   <arg name="fc_port" default="/dev/fc_link" />
-  <arg name="camera_device" default="/dev/video12" />
+  <arg name="camera_device" default="/dev/v4l/by-id/usb-HD_Camera_Manufacturer_USB_2.0_Camera-video-index0" />
   <arg name="model_path"
        default="/home/marvsmart/animal_patrol/models/edc_yolov8n_retrain5000_v6_washout_guard_640_opset12.rknn" />
 

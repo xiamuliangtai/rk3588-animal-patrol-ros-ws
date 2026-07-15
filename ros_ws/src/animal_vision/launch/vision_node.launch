@@ -8,7 +8,7 @@
                value="/home/marvsmart/animal_patrol/models/edc_yolov8n_retrain5000_v6_washout_guard_640_opset12.rknn" />
 
         <param name="camera_device"
-               value="/dev/video12" />
+               value="/dev/v4l/by-id/usb-HD_Camera_Manufacturer_USB_2.0_Camera-video-index0" />
 
         <param name="input_size"
                value="640" />

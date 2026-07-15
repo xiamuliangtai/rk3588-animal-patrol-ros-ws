@@ -148,7 +148,9 @@ public:
 
         serial_.setPort(port_name_);
         serial_.setBaudrate(static_cast<uint32_t>(baudrate_));
-        serial_.setTimeout(serial::Timeout::simpleTimeout(20));
+        serial::Timeout serial_timeout =
+        serial::Timeout::simpleTimeout(20);
+        serial_.setTimeout(serial_timeout);
 
         uwb_sub_ = nh_.subscribe(
             uwb_topic_, 50, &RKLinkSender::onUwb, this);

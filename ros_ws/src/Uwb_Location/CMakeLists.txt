@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(Uwb_Location)
+add_compile_options(-std=c++11)
 
 set(serial_DIR "/usr/local/share/serial/cmake")
 ## is used, also find other catkin packages
@@ -10,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   serial
   std_msgs
   animal_vision
+  sensor_msgs
 )
 
 ## Generate messages in the 'msg' folder
@@ -30,7 +32,12 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES Uwb_Location
-CATKIN_DEPENDS roscpp rospy std_msgs message_runtime serial
+  CATKIN_DEPENDS
+  roscpp 
+  rospy
+  std_msgs
+   message_runtime 
+   serial
 animal_vision
 #  DEPENDS system_lib
 )
