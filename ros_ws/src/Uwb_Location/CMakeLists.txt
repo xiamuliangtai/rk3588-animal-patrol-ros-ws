@@ -9,6 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   serial
   std_msgs
+  animal_vision
 )
 
 ## Generate messages in the 'msg' folder
@@ -30,6 +31,7 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES Uwb_Location
 CATKIN_DEPENDS roscpp rospy std_msgs message_runtime serial
+animal_vision
 #  DEPENDS system_lib
 )
 

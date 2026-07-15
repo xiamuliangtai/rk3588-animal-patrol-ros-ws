@@ -10,7 +10,7 @@
         respawn="true" respawn_delay="2">
     <param name="port" value="$(arg uwb_port)" />
     <param name="baudrate" value="$(arg uwb_baudrate)" />
-    <param name="simulate" value="$(arg simulate)" />
+    <param name="simulate" value="$(arg simulate)" /> 
   </node>
 
   <node pkg="Uwb_Location" type="RKLinkSender" name="rk_link_sender" output="screen"

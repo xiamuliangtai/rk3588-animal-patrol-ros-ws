@@ -3,6 +3,7 @@
   <name>Uwb_Location</name>
   <version>0.0.0</version>
   <description>The Uwb_Location package</description>
+  <depend>animal_vision</depend>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
