@@ -1,0 +1,54 @@
+<launch>
+  <!-- Hardware and model -->
+  <arg name="uwb_port" default="/dev/uwb_tag" />
+  <arg name="fc_port" default="/dev/fc_link" />
+  <arg name="camera_device" default="/dev/video12" />
+  <arg name="model_path"
+       default="/home/marvsmart/animal_patrol/models/edc_yolov8n_retrain5000_v6_washout_guard_640_opset12.rknn" />
+
+  <!-- Vision parameters -->
+  <arg name="publish_interval_sec" default="0.2" />
+  <arg name="stable_window_size" default="5" />
+  <arg name="stable_min_ratio" default="0.60" />
+  <arg name="stable_min_hit_windows" default="3" />
+
+  <node pkg="animal_vision"
+        type="vision_node.py"
+        name="vision_node"
+        output="screen"
+        respawn="true"
+        respawn_delay="2.0">
+    <param name="model_path" value="$(arg model_path)" />
+    <param name="camera_device" value="$(arg camera_device)" />
+    <param name="input_size" value="640" />
+    <param name="conf_thres" value="0.70" />
+    <param name="iou_thres" value="0.90" />
+    <param name="camera_width" value="1280" />
+    <param name="camera_height" value="720" />
+    <param name="camera_fps" value="30" />
+    <param name="publish_interval_sec"
+           value="$(arg publish_interval_sec)" />
+    <param name="stable_window_size"
+           value="$(arg stable_window_size)" />
+    <param name="stable_min_ratio"
+           value="$(arg stable_min_ratio)" />
+    <param name="stable_min_hit_windows"
+           value="$(arg stable_min_hit_windows)" />
+  </node>
+
+  <include file="$(find Uwb_Location)/launch/rk_link.launch">
+    <arg name="uwb_port" value="$(arg uwb_port)" />
+    <arg name="uwb_baudrate" value="115200" />
+    <arg name="fc_port" value="$(arg fc_port)" />
+    <arg name="fc_baudrate" value="115200" />
+    <arg name="uwb_topic" value="/uwb/data" />
+    <arg name="vision_event_topic"
+         value="/vision/detection_event" />
+    <arg name="send_rate" value="20.0" />
+    <arg name="simulate" value="false" />
+    <arg name="uwb_history_sec" value="5.0" />
+    <arg name="vision_uwb_max_delta_ms" value="150.0" />
+    <arg name="coordinate_abs_limit_cm" value="1000" />
+    <arg name="max_history_samples" value="500" />
+  </include>
+</launch>
