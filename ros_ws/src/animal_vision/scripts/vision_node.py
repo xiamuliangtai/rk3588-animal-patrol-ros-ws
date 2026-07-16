@@ -64,6 +64,15 @@ if VISION_CORE_PATH not in sys.path:
 
 import rknn_camera_yolo_test as core
 
+ANIMAL_CLASS_IDS = {
+                "none": DetectionEvent.CLASS_NONE,
+                "elephant": DetectionEvent.CLASS_ELEPHANT,
+                "tiger": DetectionEvent.CLASS_TIGER,
+                "wolf": DetectionEvent.CLASS_WOLF,
+                "monkey": DetectionEvent.CLASS_MONKEY,
+                "peacock": DetectionEvent.CLASS_PEACOCK,
+            }
+
 
 class StableResultFilter:
     """Filter window-level detections and preserve their earliest frame time."""
@@ -346,14 +355,7 @@ class VisionNode:
             publish_stamp_ns = int(publish_stamp.to_nsec())
             fps = frame_count_window / max(interval, 1.0e-6)
 
-            ANIMAL_CLASS_IDS = {
-                "none": DetectionEvent.CLASS_NONE,
-                "elephant": DetectionEvent.CLASS_ELEPHANT,
-                "tiger": DetectionEvent.CLASS_TIGER,
-                "wolf": DetectionEvent.CLASS_WOLF,
-                "monkey": DetectionEvent.CLASS_MONKEY,
-                "peacock": DetectionEvent.CLASS_PEACOCK,
-            }
+            
             window_animal, window_count = core.get_window_result(window_stats)
             window_first_seen_ns = int(
                 window_first_seen_by_animal.get(str(window_animal), 0)
