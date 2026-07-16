@@ -245,7 +245,12 @@ class VisionNode:
         return rospy.Time(seconds, nanoseconds)
 
     def publish_detection_event(
-        self, publish_stamp, target_found, first_seen_ns
+        self,
+        publish_stamp,
+        target_found,
+        first_seen_ns,
+        stable_animal,
+        stable_count,
     ):
         message = DetectionEvent()
         message.header.stamp = publish_stamp
@@ -253,6 +258,23 @@ class VisionNode:
         message.target_found = bool(target_found)
         message.first_seen = self.time_from_ns(first_seen_ns)
         message.event_id = int(self.event_id)
+
+        if target_found:
+            animal_key = str(stable_animal).strip().lower()
+            message.class_id = int(
+                ANIMAL_CLASS_IDS.get(
+                    animal_key,
+                    DetectionEvent.CLASS_UNKNOWN,
+                )
+            )
+            message.animal_count = max(
+                0,
+                min(int(stable_count), 255),
+            )
+        else:
+            message.class_id = DetectionEvent.CLASS_NONE
+            message.animal_count = 0
+
         self.event_pub.publish(message)
 
     def update_event_latch(self, stable_found, stable_first_seen_ns, now_ns):
@@ -324,6 +346,14 @@ class VisionNode:
             publish_stamp_ns = int(publish_stamp.to_nsec())
             fps = frame_count_window / max(interval, 1.0e-6)
 
+            ANIMAL_CLASS_IDS = {
+                "none": DetectionEvent.CLASS_NONE,
+                "elephant": DetectionEvent.CLASS_ELEPHANT,
+                "tiger": DetectionEvent.CLASS_TIGER,
+                "wolf": DetectionEvent.CLASS_WOLF,
+                "monkey": DetectionEvent.CLASS_MONKEY,
+                "peacock": DetectionEvent.CLASS_PEACOCK,
+            }
             window_animal, window_count = core.get_window_result(window_stats)
             window_first_seen_ns = int(
                 window_first_seen_by_animal.get(str(window_animal), 0)
@@ -376,6 +406,8 @@ class VisionNode:
                 publish_stamp,
                 stable_found,
                 self.latched_first_seen_ns,
+                stable_animal,
+                stable_count,
             )
             rospy.loginfo(json.dumps(stable_result, ensure_ascii=False))
 

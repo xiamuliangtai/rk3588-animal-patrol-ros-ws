@@ -17,6 +17,7 @@
 
 namespace rk_link
 {
+constexpr uint8_t kYoloPayloadVersion = 0x02;
 constexpr uint8_t kFrameHead1 = 0xAA;
 constexpr uint8_t kFrameHead2 = 0x55;
 constexpr uint8_t kVersion = 0x01;
@@ -54,6 +55,14 @@ void appendU16Le(std::vector<uint8_t>& out, uint16_t value)
 {
     out.push_back(static_cast<uint8_t>(value & 0xFFU));
     out.push_back(static_cast<uint8_t>((value >> 8U) & 0xFFU));
+}
+
+void appendU32Le(std::vector<uint8_t>& out, uint32_t value)
+{
+    out.push_back(static_cast<uint8_t>(value & 0xFFU));
+    out.push_back(static_cast<uint8_t>((value >> 8U) & 0xFFU));
+    out.push_back(static_cast<uint8_t>((value >> 16U) & 0xFFU));
+    out.push_back(static_cast<uint8_t>((value >> 24U) & 0xFFU));
 }
 
 void appendI16Le(std::vector<uint8_t>& out, int16_t value)
@@ -355,18 +364,28 @@ private:
         return true;
     }
 
-    void sendYolo(bool target_found, int16_t x_cm, int16_t y_cm)
+        void sendYolo(
+        bool target_found,
+        uint8_t class_id,
+        uint8_t animal_count,
+        int16_t x_cm,
+        int16_t y_cm,
+        uint32_t event_id)
     {
         std::vector<uint8_t> payload;
         payload.reserve(12);
-        rk_link::appendU8(payload, target_found ? 1U : 0U);
-        rk_link::appendU8(payload, 0U);
-        rk_link::appendU8(payload, 0U);
-        rk_link::appendU8(payload, 0U);
+
+        rk_link::appendU8(
+            payload,
+            target_found ? 1U : 0U);
+        rk_link::appendU8(payload, class_id);
+        rk_link::appendU8(payload, animal_count);
+        rk_link::appendU8(
+            payload,
+            rk_link::kYoloPayloadVersion);
         rk_link::appendI16Le(payload, x_cm);
         rk_link::appendI16Le(payload, y_cm);
-        rk_link::appendI16Le(payload, 0);
-        rk_link::appendI16Le(payload, 0);
+        rk_link::appendU32Le(payload, event_id);
 
         writeFrame(
             rk_link::packFrame(
@@ -374,7 +393,6 @@ private:
                 nextSeq(),
                 payload));
     }
-
     void onUwb(const Uwb_Location::uwb::ConstPtr& message)
     {
         const ros::Time stamp = message->header.stamp.isZero()
@@ -430,8 +448,25 @@ private:
             detection_latched_ = false;
             latched_event_id_ = message->event_id;
             latched_first_seen_ = ros::Time(0, 0);
-            sendYolo(false, 0, 0);
-            ROS_INFO_THROTTLE(2.0, "RK_LINK YOLO target_found=0");
+
+            sendYolo(
+                false,
+                message->class_id,
+                message->animal_count,
+                0,
+                0,
+                message->event_id);
+
+            ROS_INFO_THROTTLE(
+                2.0,
+                "RK_LINK YOLO target_found=0 "
+                "class_id=%u count=%u event_id=%u",
+                static_cast<unsigned int>(
+                    message->class_id),
+                static_cast<unsigned int>(
+                    message->animal_count),
+                static_cast<unsigned int>(
+                    message->event_id));
             return;
         }
 
@@ -449,12 +484,20 @@ private:
                     &matched_y_cm,
                     &match_delta_ms))
             {
-                sendYolo(false, 0, 0);
+                sendYolo(
+                    false,
+                    message->class_id,
+                    message->animal_count,
+                    0,
+                    0,
+                    message->event_id);
+
                 ROS_WARN_THROTTLE(
                     1.0,
                     "YOLO event %u has no valid UWB match; "
                     "history=%zu max_delta_ms=%.1f",
-                    static_cast<unsigned int>(message->event_id),
+                    static_cast<unsigned int>(
+                        message->event_id),
                     uwb_history_.size(),
                     vision_uwb_max_delta_ms_);
                 return;
@@ -469,20 +512,35 @@ private:
             ROS_INFO(
                 "YOLO event %u latched first_seen=%.6f "
                 "x_cm=%d y_cm=%d match_delta_ms=%.1f",
-                static_cast<unsigned int>(latched_event_id_),
+                static_cast<unsigned int>(
+                    latched_event_id_),
                 message->first_seen.toSec(),
                 static_cast<int>(latched_x_cm_),
                 static_cast<int>(latched_y_cm_),
                 match_delta_ms);
         }
 
-        // Keep sending 1 while the same stable event remains active.
-        sendYolo(true, latched_x_cm_, latched_y_cm_);
-    }
+        sendYolo(
+            true,
+            message->class_id,
+            message->animal_count,
+            latched_x_cm_,
+            latched_y_cm_,
+            latched_event_id_);
 
-    uint8_t nextSeq()
-    {
-        return seq_++;
+        ROS_INFO_THROTTLE(
+            1.0,
+            "RK_LINK YOLO target_found=1 "
+            "class_id=%u count=%u event_id=%u "
+            "x_cm=%d y_cm=%d",
+            static_cast<unsigned int>(
+                message->class_id),
+            static_cast<unsigned int>(
+                message->animal_count),
+            static_cast<unsigned int>(
+                latched_event_id_),
+            static_cast<int>(latched_x_cm_),
+            static_cast<int>(latched_y_cm_));
     }
 
 private:

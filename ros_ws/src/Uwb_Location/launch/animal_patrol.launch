@@ -21,8 +21,8 @@
     <param name="model_path" value="$(arg model_path)" />
     <param name="camera_device" value="$(arg camera_device)" />
     <param name="input_size" value="640" />
-    <param name="conf_thres" value="0.70" />
-    <param name="iou_thres" value="0.90" />
+    <param name="conf_thres" value="0.25" />
+    <param name="iou_thres" value="0.45" />
     <param name="camera_width" value="1280" />
     <param name="camera_height" value="720" />
     <param name="camera_fps" value="30" />
