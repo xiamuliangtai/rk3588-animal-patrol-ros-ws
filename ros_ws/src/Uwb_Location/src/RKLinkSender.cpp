@@ -543,7 +543,14 @@ private:
             static_cast<int>(latched_y_cm_));
     }
 
+uint8_t nextSeq()
+    {
+        return seq_++;
+    }
+
 private:
+
+    
     ros::NodeHandle nh_;
     ros::NodeHandle pnh_;
     ros::Subscriber uwb_sub_;
@@ -560,6 +567,8 @@ private:
     double vision_uwb_max_delta_ms_;
     int coordinate_abs_limit_cm_;
     int max_history_samples_;
+
+
 
     uint8_t seq_;
     ros::Time last_uwb_send_;
