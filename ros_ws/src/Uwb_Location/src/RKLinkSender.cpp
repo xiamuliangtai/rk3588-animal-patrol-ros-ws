@@ -3,6 +3,7 @@
 
 #include <Uwb_Location/uwb.h>
 #include <animal_vision/DetectionEvent.h>
+#include <animal_vision/K230Detection.h>
 
 #include <algorithm>
 #include <cmath>
@@ -15,6 +16,7 @@
 #include <string>
 #include <vector>
 
+
 namespace rk_link
 {
 constexpr uint8_t kYoloPayloadVersion = 0x02;
@@ -24,6 +26,8 @@ constexpr uint8_t kVersion = 0x01;
 constexpr uint8_t kMsgUwb = 0x01;
 constexpr uint8_t kMsgYolo = 0x02;
 constexpr size_t kMaxPayload = 32;
+constexpr uint8_t kK230PayloadVersion = 0x01;
+constexpr uint8_t kMsgK230 = 0x03;
 
 uint16_t crc16Modbus(const uint8_t* data, size_t len)
 {
@@ -114,6 +118,8 @@ int32_t metersToCentimeters(float value_m)
         std::llround(static_cast<double>(value_m) * 100.0));
 }
 
+
+
 }  // namespace rk_link
 
 class RKLinkSender
@@ -143,6 +149,10 @@ public:
             "vision_event_topic",
             vision_event_topic_,
             "/vision/detection_event");
+        pnh_.param<std::string>(
+            "k230_topic",
+            k230_topic_,
+            "/k230/detection");
         pnh_.param("send_rate", send_rate_hz_, 20.0);
         pnh_.param("uwb_history_sec", uwb_history_sec_, 5.0);
         pnh_.param(
@@ -165,6 +175,13 @@ public:
             uwb_topic_, 50, &RKLinkSender::onUwb, this);
         vision_sub_ = nh_.subscribe(
             vision_event_topic_, 10, &RKLinkSender::onVision, this);
+
+        k230_sub_ = nh_.subscribe(
+            k230_topic_,
+            10,
+            &RKLinkSender::onK230,
+            this);
+
         reconnect_timer_ = nh_.createTimer(
             ros::Duration(1.0),
             &RKLinkSender::onReconnectTimer,
@@ -177,9 +194,11 @@ public:
             << " baudrate=" << baudrate_
             << " uwb_topic=" << uwb_topic_
             << " vision_event_topic=" << vision_event_topic_
+            << " k230_topic=" << k230_topic_
             << " send_rate=" << send_rate_hz_
             << " history_sec=" << uwb_history_sec_
             << " max_match_delta_ms=" << vision_uwb_max_delta_ms_);
+            
     }
 
 private:
@@ -543,6 +562,90 @@ private:
             static_cast<int>(latched_y_cm_));
     }
 
+void onK230(
+    const animal_vision::K230Detection::ConstPtr& message)
+{
+    const bool online = message->online;
+    const bool target_found =
+        online && message->target_found;
+
+    const uint8_t class_id =
+        online ? message->class_id : 0U;
+
+    const uint8_t animal_count =
+        online ? message->animal_count : 0U;
+
+    const uint8_t confidence_percent =
+        online ? message->confidence_percent : 0U;
+
+    std::vector<uint8_t> payload;
+    payload.reserve(12U);
+
+    rk_link::appendU8(
+        payload,
+        rk_link::kK230PayloadVersion);
+
+    rk_link::appendU8(
+        payload,
+        online ? 1U : 0U);
+
+    rk_link::appendU8(
+        payload,
+        target_found ? 1U : 0U);
+
+    rk_link::appendU8(
+        payload,
+        class_id);
+
+    rk_link::appendU8(
+        payload,
+        animal_count);
+
+    rk_link::appendU8(
+        payload,
+        confidence_percent);
+
+    rk_link::appendU32Le(
+        payload,
+        message->event_id);
+
+    rk_link::appendU8(
+        payload,
+        message->sequence);
+
+    rk_link::appendU8(
+        payload,
+        0U);
+
+    const bool sent =
+        writeFrame(
+            rk_link::packFrame(
+                rk_link::kMsgK230,
+                nextSeq(),
+                payload));
+
+    if (sent)
+    {
+        ROS_INFO_THROTTLE(
+            1.0,
+            "RK_LINK K230 online=%u found=%u "
+            "class=%u count=%u confidence=%u "
+            "event=%u source_seq=%u",
+            online ? 1U : 0U,
+            target_found ? 1U : 0U,
+            static_cast<unsigned int>(
+                class_id),
+            static_cast<unsigned int>(
+                animal_count),
+            static_cast<unsigned int>(
+                confidence_percent),
+            static_cast<unsigned int>(
+                message->event_id),
+            static_cast<unsigned int>(
+                message->sequence));
+    }
+}
+
 uint8_t nextSeq()
     {
         return seq_++;
@@ -555,12 +658,14 @@ private:
     ros::NodeHandle pnh_;
     ros::Subscriber uwb_sub_;
     ros::Subscriber vision_sub_;
+    ros::Subscriber k230_sub_;
     ros::Timer reconnect_timer_;
     serial::Serial serial_;
 
     std::string port_name_;
     std::string uwb_topic_;
     std::string vision_event_topic_;
+    std::string k230_topic_;
     int baudrate_;
     double send_rate_hz_;
     double uwb_history_sec_;

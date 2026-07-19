@@ -1,22 +1,50 @@
 <launch>
   <!-- Serial devices -->
-  <arg name="uwb_port" default="/dev/uwb_tag" />
-  <arg name="uwb_baudrate" default="115200" />
-  <arg name="fc_port" default="/dev/fc_link" />
-  <arg name="fc_baudrate" default="115200" />
+  <arg name="uwb_port"
+       default="/dev/uwb_tag" />
+  <arg name="uwb_baudrate"
+       default="115200" />
 
-  <!-- ROS topics and rates -->
-  <arg name="uwb_topic" default="/uwb/data" />
+  <arg name="fc_port"
+       default="/dev/fc_link" />
+  <arg name="fc_baudrate"
+       default="115200" />
+
+  <arg name="k230_port"
+       default="/dev/k230_vision" />
+  <arg name="k230_baudrate"
+       default="115200" />
+
+  <!-- ROS topics -->
+  <arg name="uwb_topic"
+       default="/uwb/data" />
   <arg name="vision_event_topic"
        default="/vision/detection_event" />
-  <arg name="send_rate" default="20.0" />
-  <arg name="simulate" default="false" />
+  <arg name="k230_topic"
+       default="/k230/detection" />
+
+  <!-- Runtime parameters -->
+  <arg name="send_rate"
+       default="20.0" />
+  <arg name="simulate"
+       default="false" />
+
+  <arg name="k230_poll_rate"
+       default="200.0" />
+  <arg name="k230_offline_timeout"
+       default="1.0" />
+  <arg name="k230_reopen_period"
+       default="1.0" />
 
   <!-- YOLO and UWB timestamp matching -->
-  <arg name="uwb_history_sec" default="5.0" />
-  <arg name="vision_uwb_max_delta_ms" default="150.0" />
-  <arg name="coordinate_abs_limit_cm" default="1000" />
-  <arg name="max_history_samples" default="500" />
+  <arg name="uwb_history_sec"
+       default="5.0" />
+  <arg name="vision_uwb_max_delta_ms"
+       default="150.0" />
+  <arg name="coordinate_abs_limit_cm"
+       default="1000" />
+  <arg name="max_history_samples"
+       default="500" />
 
   <node pkg="Uwb_Location"
         type="UwbLocation"
@@ -24,9 +52,32 @@
         output="screen"
         respawn="true"
         respawn_delay="2.0">
-    <param name="port" value="$(arg uwb_port)" />
-    <param name="baudrate" value="$(arg uwb_baudrate)" />
-    <param name="simulate" value="$(arg simulate)" />
+    <param name="port"
+           value="$(arg uwb_port)" />
+    <param name="baudrate"
+           value="$(arg uwb_baudrate)" />
+    <param name="simulate"
+           value="$(arg simulate)" />
+  </node>
+
+  <node pkg="Uwb_Location"
+        type="K230SerialReceiver"
+        name="k230_serial_receiver"
+        output="screen"
+        respawn="true"
+        respawn_delay="2.0">
+    <param name="port"
+           value="$(arg k230_port)" />
+    <param name="baudrate"
+           value="$(arg k230_baudrate)" />
+    <param name="topic"
+           value="$(arg k230_topic)" />
+    <param name="poll_rate"
+           value="$(arg k230_poll_rate)" />
+    <param name="offline_timeout"
+           value="$(arg k230_offline_timeout)" />
+    <param name="reopen_period"
+           value="$(arg k230_reopen_period)" />
   </node>
 
   <node pkg="Uwb_Location"
@@ -35,12 +86,18 @@
         output="screen"
         respawn="true"
         respawn_delay="2.0">
-    <param name="port" value="$(arg fc_port)" />
-    <param name="baudrate" value="$(arg fc_baudrate)" />
-    <param name="uwb_topic" value="$(arg uwb_topic)" />
+    <param name="port"
+           value="$(arg fc_port)" />
+    <param name="baudrate"
+           value="$(arg fc_baudrate)" />
+    <param name="uwb_topic"
+           value="$(arg uwb_topic)" />
     <param name="vision_event_topic"
            value="$(arg vision_event_topic)" />
-    <param name="send_rate" value="$(arg send_rate)" />
+    <param name="k230_topic"
+           value="$(arg k230_topic)" />
+    <param name="send_rate"
+           value="$(arg send_rate)" />
     <param name="uwb_history_sec"
            value="$(arg uwb_history_sec)" />
     <param name="vision_uwb_max_delta_ms"

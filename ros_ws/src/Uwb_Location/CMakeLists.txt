@@ -64,6 +64,23 @@ target_link_libraries(UwbLocation
         ${catkin_LIBRARIES})
 
 add_executable(RKLinkSender src/RKLinkSender.cpp)
-add_dependencies(RKLinkSender ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(RKLinkSender ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS}  animal_vision_generate_messages_cpp)
 target_link_libraries(RKLinkSender
         ${catkin_LIBRARIES})
+
+
+add_executable(
+  K230SerialReceiver
+  src/K230SerialReceiver.cpp
+)
+
+add_dependencies(
+  K230SerialReceiver
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
+
+target_link_libraries(
+  K230SerialReceiver
+  ${catkin_LIBRARIES}
+)

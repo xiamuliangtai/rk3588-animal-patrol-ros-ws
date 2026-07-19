@@ -204,10 +204,20 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation rospy std_msgs
 )
 
-add_message_files(FILES DetectionEvent.msg)
+add_message_files(
+  FILES
+  DetectionEvent.msg
+  K230Detection.msg
+)
 
-generate_messages(DEPENDENCIES std_msgs)
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+)
 
-catkin_package(CATKIN_DEPENDS
-  message_runtime rospy std_msgs
+catkin_package(
+  CATKIN_DEPENDS
+  message_runtime
+  rospy
+  std_msgs
 )
